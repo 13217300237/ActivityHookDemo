@@ -8,6 +8,12 @@ import java.lang.reflect.InvocationHandler;
 import java.lang.reflect.Method;
 import java.lang.reflect.Proxy;
 
+/**
+ * hook Activity的实现方式3:
+ * hook AMS（ActivityManagerService）兼容 26以上，以及26以下的版本(SDK 26对AMS实例的获取进行了代码更改)
+ *
+ * 今天，在已经能够实现全局hook MS的方案下，进一步改造，实现 无清单启动Activity
+ */
 public class GlobalActivityHookHelper {
 
     //设备系统版本是不是大于等于26

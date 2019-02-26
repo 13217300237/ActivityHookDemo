@@ -11,6 +11,10 @@ import android.util.Log;
 import java.lang.reflect.Field;
 import java.lang.reflect.Method;
 
+/**
+ * HookStartActivity的方式1：
+ * 将hook点定位Activity.startActivity-> Activity 的成员 mInstrumentation
+ */
 public class ActivityHookHelper {
 
     public static void hook(Activity activity) {

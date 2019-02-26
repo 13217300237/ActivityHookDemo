@@ -11,6 +11,10 @@ import android.util.Log;
 import java.lang.reflect.Field;
 import java.lang.reflect.Method;
 
+/**
+ * HookStartActivity的方式2：
+ * 将hook点定位 ActivityThread 的成员 mInstrumentation
+ */
 public class ApplicationContextHookHelper {
     public static void hook() {
         // 如何取得ActivityThread好像是单例的吧。那就简单了，
