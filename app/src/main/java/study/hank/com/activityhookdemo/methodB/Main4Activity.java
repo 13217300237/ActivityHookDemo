@@ -7,8 +7,6 @@ import android.view.View;
 
 import study.hank.com.activityhookdemo.GlobalActivityHookHelper;
 import study.hank.com.activityhookdemo.R;
-import study.hank.com.activityhookdemo.methodA.Main2Activity;
-import study.hank.com.activityhookdemo.methodA.Main3Activity;
 
 public class Main4Activity extends AppCompatActivity {
 
@@ -17,8 +15,7 @@ public class Main4Activity extends AppCompatActivity {
         super.onCreate(savedInstanceState);
         setContentView(R.layout.activity_main4);
 
-        GlobalActivityHookHelper.hook();
-//        ApplicationContextHookHelper.hook();
+//        ApplicationContextHookHelper.hookAMS();
         findViewById(R.id.btn).setOnClickListener(new View.OnClickListener() {
             @Override
             public void onClick(View v) {

@@ -3,6 +3,7 @@
     package="study.hank.com.activityhookdemo">
 
     <application
+        android:name="study.hank.com.AppMain"
         android:allowBackup="true"
         android:icon="@mipmap/ic_launcher"
         android:label="@string/app_name"
@@ -10,23 +11,13 @@
         android:supportsRtl="true"
         android:theme="@style/AppTheme">
         <activity android:name=".methodA.MainActivity">
-            <!--<intent-filter>-->
-                <!--<action android:name="android.intent.action.MAIN" />-->
-
-                <!--<category android:name="android.intent.category.LAUNCHER" />-->
-            <!--</intent-filter>-->
-        </activity>
-        <activity android:name=".methodA.Main2Activity" />
-        <activity android:name=".methodA.Main3Activity" />
-        <activity android:name=".methodB.Main4Activity">
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />
 
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
         </activity>
-        <activity android:name=".methodB.Main5Activity"></activity>
-        <activity android:name=".methodB.Main6Activity"></activity>
+
     </application>
 
 </manifest>
