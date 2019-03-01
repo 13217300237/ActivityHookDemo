@@ -301,6 +301,10 @@ public class GlobalActivityHookHelper {
     }
 
 
+    /**
+     * 由于我只在SDK 28 对应的9.0设备上做过成功的试验，所以此方法命名为hookPMAfter28
+     * @param context
+     */
     private static void hookPMAfter28(Context context) {
         try {
             String pmName = Util.getPMName(context);
