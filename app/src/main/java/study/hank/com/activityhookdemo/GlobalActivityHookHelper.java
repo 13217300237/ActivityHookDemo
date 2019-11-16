@@ -5,6 +5,7 @@ import android.content.Context;
 import android.content.Intent;
 import android.content.pm.PackageManager;
 import android.os.Build;
+import android.os.Bundle;
 import android.os.Handler;
 import android.os.Message;
 import android.util.Log;
@@ -27,61 +28,71 @@ public class GlobalActivityHookHelper {
 
         hookAMS(context);//使用假的Activity，骗过AMS的检测
 
-        if (ifSdkOverIncluding28())
-            hookActivityThread_mH_AfterIncluding28();//将真实的Intent还原回去，让系统可以跳到原本该跳的地方.
-        else {
-            hookActivityThread_mH_before28(context);
-        }
+        hookActivityThread_mH(context);
 
         hookPMAfter28(context);//由于AppCompatActivity存在PMS检测，如果这里不hook的话，就会包PackageNameNotFoundException
     }
 
-    //设备系统版本是不是大于等于26
-    private static boolean ifSdkOverIncluding26() {
+    //设备系统版本是不是大于等于29(Android 10)
+    private static boolean ifSdkOverIncluding29() {
         int SDK_INT = Build.VERSION.SDK_INT;
-        if (SDK_INT > 26 || SDK_INT == 26) {
-            return true;
-        } else {
-            return false;
-        }
+        return SDK_INT >= 29;
     }
 
-    //设备系统版本是不是大于等于26
+    //设备系统版本是不是大于等于26(Android 8.0 Oreo)
+    private static boolean ifSdkOverIncluding26() {
+        int SDK_INT = Build.VERSION.SDK_INT;
+        return SDK_INT >= 26;
+    }
+
+    //设备系统版本是不是大于等于28(Android 9.0 Pie)
     private static boolean ifSdkOverIncluding28() {
         int SDK_INT = Build.VERSION.SDK_INT;
-        if (SDK_INT > 28 || SDK_INT == 28) {
-            return true;
-        } else {
-            return false;
-        }
+        return SDK_INT >= 28;
     }
 
     /**
      * 这里对AMS进行hook
      *
+     * ActivityManager(ActivityManagerNative)里的IActivityManager是一个单例，用我们的代理对象替换它!
+     *
      * @param context
      */
     private static void hookAMS(Context context) {
         try {
-            Class<?> ActivityManagerClz;
-            final Object IActivityManagerObj;//这个就是AMS实例
-            Method getServiceMethod;
-            Field IActivityManagerSingletonField;
-            if (ifSdkOverIncluding26()) {//26，27，28的ams获取方式是通过ActivityManager.getService()
+            final Class<?> ActivityManagerClz;
+            final String getServiceMethodStr;
+            final String IActivityManagerSingletonFieldStr;
+            if (ifSdkOverIncluding29()) {//29的ams获取方式是通过ActivityTaskManager.getService()
+                ActivityManagerClz = Class.forName("android.app.ActivityTaskManager");
+                getServiceMethodStr = "getService";
+                IActivityManagerSingletonFieldStr = "IActivityTaskManagerSingleton";
+            } else if (ifSdkOverIncluding26()) {//26，27，28的ams获取方式是通过ActivityManager.getService()
                 ActivityManagerClz = Class.forName("android.app.ActivityManager");
-                getServiceMethod = ActivityManagerClz.getDeclaredMethod("getService");
-                IActivityManagerSingletonField = ActivityManagerClz.getDeclaredField("IActivityManagerSingleton");//单例类成员的名字也不一样
+                getServiceMethodStr = "getService";
+                IActivityManagerSingletonFieldStr = "IActivityManagerSingleton";
             } else {//25往下，是ActivityManagerNative.getDefault()
                 ActivityManagerClz = Class.forName("android.app.ActivityManagerNative");
-                getServiceMethod = ActivityManagerClz.getDeclaredMethod("getDefault");
-                IActivityManagerSingletonField = ActivityManagerClz.getDeclaredField("gDefault");//单例类成员的名字也不一样
+                getServiceMethodStr = "getDefault";
+                IActivityManagerSingletonFieldStr = "gDefault";
             }
-            IActivityManagerObj = getServiceMethod.invoke(null);//OK，已经取得这个系统自己的AMS实例
 
-            // 2.现在创建我们的AMS实例
+            //这个就是ActivityManager实例
+            Object ActivityManagerObj = ReflectUtil.invokeStaticMethod(ActivityManagerClz,getServiceMethodStr);
+            //这个就是这个就是ActivityManager实例中的IActivityManager单例对象
+            Object IActivityManagerSingleton = ReflectUtil.staticFieldValue(ActivityManagerClz,
+                    IActivityManagerSingletonFieldStr);
+
+            // 2.现在创建我们的IActivityManager实例
             // 由于IActivityManager是一个接口，那么其实我们可以使用Proxy类来进行代理对象的创建
             // 结果被摆了一道，IActivityManager这玩意居然还是个AIDL，动态生成的类，编译器还不认识这个类，怎么办？反射咯
-            Class<?> IActivityManagerClz = Class.forName("android.app.IActivityManager");
+            Class<?> IActivityManagerClz;
+            if (ifSdkOverIncluding29()) {
+                IActivityManagerClz = Class.forName("android.app.IActivityTaskManager");
+            } else {
+                IActivityManagerClz = Class.forName("android.app.IActivityManager");
+            }
+
 
             // 构建代理类需要两个东西用于创建伪装的Intent
             String packageName = Util.getPMName(context);
@@ -90,16 +101,12 @@ public class GlobalActivityHookHelper {
                     Proxy.newProxyInstance(
                             Thread.currentThread().getContextClassLoader(),
                             new Class[]{IActivityManagerClz},
-                            new ProxyInvocation(IActivityManagerObj, packageName, clz));
+                            new AMSProxyInvocation(ActivityManagerObj, packageName, clz));
 
             //3.拿到AMS实例，然后用代理的AMS换掉真正的AMS，代理的AMS则是用 假的Intent骗过了 activity manifest检测.
             //偷梁换柱
-            IActivityManagerSingletonField.setAccessible(true);
-            Object IActivityManagerSingletonObj = IActivityManagerSingletonField.get(null);
-            Class<?> SingletonClz = Class.forName("android.util.Singleton");//反射创建一个Singleton的class
-            Field mInstanceField = SingletonClz.getDeclaredField("mInstance");
-            mInstanceField.setAccessible(true);
-            mInstanceField.set(IActivityManagerSingletonObj, proxyIActivityManager);
+            Field mInstanceField = ReflectUtil.findSingletonField("mInstance");
+            mInstanceField.set(IActivityManagerSingleton, proxyIActivityManager);
 
         } catch (Exception e) {
             e.printStackTrace();
@@ -111,20 +118,21 @@ public class GlobalActivityHookHelper {
     /**
      * 把InvocationHandler的实现类提取出来，因为这里包含了核心技术逻辑，最好独立，方便维护
      */
-    private static class ProxyInvocation implements InvocationHandler {
+    private static class AMSProxyInvocation implements InvocationHandler {
 
-        Object amsObj;
+        Object amObj;
         String packageName;//这两个String是用来构建Intent的ComponentName的
         String clz;
 
-        public ProxyInvocation(Object amsInstance, String packageName, String clz) {
-            this.amsObj = amsInstance;
+        public AMSProxyInvocation(Object amObj, String packageName, String clz) {
+            this.amObj = amObj;
             this.packageName = packageName;
             this.clz = clz;
         }
 
         @Override
         public Object invoke(Object proxy, Method method, Object[] args) throws Throwable {
+            Log.e("GlobalActivityHook", "method.getName() = "+method.getName());
             //proxy是创建出来的代理类，method是接口中的方法，args是接口执行时的实参
             if (method.getName().equals("startActivity")) {
                 Log.d("GlobalActivityHook", "全局hook 到了 startActivity");
@@ -152,43 +160,13 @@ public class GlobalActivityHookHelper {
                 //继续看源码。
 
             }
-            return method.invoke(amsObj, args);
+            return method.invoke(amObj, args);
         }
     }
 
 
     //下面进行ActivityThread的mH的hook,这是针对SDK28做的hook
-    private static void hookActivityThread_mH_AfterIncluding28() {
-
-        try {
-            //确定hook点，ActivityThread类的mh
-            // 先拿到ActivityThread
-            Class<?> ActivityThreadClz = Class.forName("android.app.ActivityThread");
-            Field field = ActivityThreadClz.getDeclaredField("sCurrentActivityThread");
-            field.setAccessible(true);
-            Object ActivityThreadObj = field.get(null);//OK，拿到主线程实例
-
-            //现在拿mH
-            Field mHField = ActivityThreadClz.getDeclaredField("mH");
-            mHField.setAccessible(true);
-            Handler mHObj = (Handler) mHField.get(ActivityThreadObj);//ok，当前的mH拿到了
-            //再拿它的mCallback成员
-            Field mCallbackField = Handler.class.getDeclaredField("mCallback");
-            mCallbackField.setAccessible(true);
-
-            //2.现在，造一个代理mH，
-            // 他就是一个简单的Handler子类
-            ProxyHandlerCallback proxyMHCallback = new ProxyHandlerCallback();//错，不需要重写全部mH，只需要对mH的callback进行重新定义
-
-            //3.替换
-            //将Handler的mCallback成员，替换成创建出来的代理HandlerCallback
-            mCallbackField.set(mHObj, proxyMHCallback);
-
-        } catch (Exception e) {
-            e.printStackTrace();
-        }
-    }
-
+    //将真实的Intent还原回去，让系统可以跳到原本该跳的地方.
     private static class ProxyHandlerCallback implements Handler.Callback {
 
         private int EXECUTE_TRANSACTION = 159;//这个值，是android.app.ActivityThread的内部类H 中定义的常量EXECUTE_TRANSACTION
@@ -223,10 +201,15 @@ public class GlobalActivityHookHelper {
                     Field mIntentField = LaunchActivityItemClz.getDeclaredField("mIntent");
                     mIntentField.setAccessible(true);
                     Intent mIntent = (Intent) mIntentField.get(LaunchActivityItemObj);
-                    Intent oriIntent = (Intent) mIntent.getExtras().get(ORI_INTENT_TAG);
-                    //那么现在有了最原始的intent，应该怎么处理呢？
-                    Log.d("1", "2");
-                    mIntentField.set(LaunchActivityItemObj, oriIntent);
+
+                    Bundle extras = mIntent.getExtras();
+                    if (extras != null) {
+                        Intent oriIntent = (Intent) extras.get(ORI_INTENT_TAG);
+                        //那么现在有了最原始的intent，应该怎么处理呢？
+                        Log.d("1", "2");
+                        mIntentField.set(LaunchActivityItemObj, oriIntent);
+                    }
+
                     return result;
                 } catch (Exception e) {
                     e.printStackTrace();
@@ -236,23 +219,31 @@ public class GlobalActivityHookHelper {
         }
     }
 
-    /**
-     * @param context
-     * @throws Exception
-     */
-    private static void hookActivityThread_mH_before28(Context context) {
+    private static void hookActivityThread_mH(Context context) {
+
         try {
             Class<?> activityThreadClazz = Class.forName("android.app.ActivityThread");
-            Field sCurrentActivityThreadField = activityThreadClazz.getDeclaredField("sCurrentActivityThread");
-            sCurrentActivityThreadField.setAccessible(true);
-            Object sCurrentActivityThreadObj = sCurrentActivityThreadField.get(null);
 
-            Field mHField = activityThreadClazz.getDeclaredField("mH");
-            mHField.setAccessible(true);
-            Handler mH = (Handler) mHField.get(sCurrentActivityThreadObj);
-            Field callBackField = Handler.class.getDeclaredField("mCallback");
-            callBackField.setAccessible(true);
-            callBackField.set(mH, new ActivityThreadHandlerCallBack(context));
+            Object sCurrentActivityThread = ReflectUtil.staticFieldValue(activityThreadClazz,"sCurrentActivityThread");
+
+            Handler mH = (Handler) ReflectUtil.fieldValue(sCurrentActivityThread,"mH");
+
+            Field mCallBackField = ReflectUtil.findField(Handler.class,"mCallback");
+
+            Handler.Callback callback;
+            if (ifSdkOverIncluding28()) {
+                //2.现在，造一个代理
+                // 他就是一个简单的Handler子类
+                callback = new ProxyHandlerCallback();//不需要重写全部mH，只需要对mH的callback进行重新定义
+            } else {
+                callback = new ActivityThreadHandlerCallBack(context);
+            }
+
+            //3.替换
+            //将Handler的mCallback成员，替换成创建出来的代理HandlerCallback
+            mCallBackField.set(mH, callback);
+
+
         } catch (Exception e) {
             e.printStackTrace();
         }
@@ -272,8 +263,7 @@ public class GlobalActivityHookHelper {
             int LAUNCH_ACTIVITY = 0;
             try {
                 Class<?> clazz = Class.forName("android.app.ActivityThread$H");
-                Field field = clazz.getField("LAUNCH_ACTIVITY");
-                LAUNCH_ACTIVITY = field.getInt(null);
+                LAUNCH_ACTIVITY = (int) ReflectUtil.staticFieldValue(clazz, "LAUNCH_ACTIVITY");
             } catch (Exception e) {
             }
             if (msg.what == LAUNCH_ACTIVITY) {
@@ -286,9 +276,8 @@ public class GlobalActivityHookHelper {
     private static void handleLaunchActivity(Context context, Message msg) {
         try {
             Object obj = msg.obj;
-            Field intentField = obj.getClass().getDeclaredField("intent");
-            intentField.setAccessible(true);
-            Intent proxyIntent = (Intent) intentField.get(obj);
+
+            Intent proxyIntent = (Intent) ReflectUtil.fieldValue(obj,"intent");
             //拿到之前真实要被启动的Intent 然后把Intent换掉
             Intent originallyIntent = proxyIntent.getParcelableExtra(ORI_INTENT_TAG);
             if (originallyIntent == null) {
@@ -310,12 +299,12 @@ public class GlobalActivityHookHelper {
             String pmName = Util.getPMName(context);
             String hostClzName = Util.getHostClzName(context, pmName);
 
-            Class<?> forName = Class.forName("android.app.ActivityThread");//PM居然是来自ActivityThread
-            Field field = forName.getDeclaredField("sCurrentActivityThread");
-            field.setAccessible(true);
-            Object activityThread = field.get(null);
-            Method getPackageManager = activityThread.getClass().getDeclaredMethod("getPackageManager");
-            Object iPackageManager = getPackageManager.invoke(activityThread);
+
+            Class<?> activityThreadClazz = Class.forName("android.app.ActivityThread");
+            Object sCurrentActivityThread = ReflectUtil.staticFieldValue(activityThreadClazz,"sCurrentActivityThread");//PM居然是来自ActivityThread
+
+
+            Object iPackageManager = ReflectUtil.invokeMethod(sCurrentActivityThread,"getPackageManager");
 
             String packageName = Util.getPMName(context);
             PMSInvocationHandler handler = new PMSInvocationHandler(iPackageManager, packageName, hostClzName);
@@ -323,9 +312,8 @@ public class GlobalActivityHookHelper {
             Object proxy = Proxy.newProxyInstance(Thread.currentThread().getContextClassLoader(), new
                     Class<?>[]{iPackageManagerIntercept}, handler);
             // 获取 sPackageManager 属性
-            Field iPackageManagerField = activityThread.getClass().getDeclaredField("sPackageManager");
-            iPackageManagerField.setAccessible(true);
-            iPackageManagerField.set(activityThread, proxy);
+            Field sPackageManagerField = ReflectUtil.findField(sCurrentActivityThread, "sPackageManager");
+            sPackageManagerField.set(sCurrentActivityThread, proxy);
         } catch (
                 Exception e)
 
