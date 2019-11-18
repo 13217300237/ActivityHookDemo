@@ -1,11 +1,11 @@
 package study.hank.com.activityhookdemo.methodB;
 
 import android.content.Intent;
-import android.support.v7.app.AppCompatActivity;
 import android.os.Bundle;
 import android.view.View;
 
-import study.hank.com.activityhookdemo.GlobalActivityHookHelper;
+import androidx.appcompat.app.AppCompatActivity;
+
 import study.hank.com.activityhookdemo.R;
 
 public class Main4Activity extends AppCompatActivity {

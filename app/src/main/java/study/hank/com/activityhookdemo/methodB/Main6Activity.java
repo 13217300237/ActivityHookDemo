@@ -1,7 +1,8 @@
 package study.hank.com.activityhookdemo.methodB;
 
 import android.os.Bundle;
-import android.support.v7.app.AppCompatActivity;
+
+import androidx.appcompat.app.AppCompatActivity;
 
 import study.hank.com.activityhookdemo.R;
 
