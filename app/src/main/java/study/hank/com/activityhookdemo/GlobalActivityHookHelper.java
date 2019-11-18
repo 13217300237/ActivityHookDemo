@@ -53,7 +53,6 @@ public class GlobalActivityHookHelper {
 
     /**
      * 这里对AMS进行hook
-     *
      * ActivityManager(ActivityManagerNative)里的IActivityManager是一个单例，用我们的代理对象替换它!
      *
      * @param context
@@ -78,7 +77,7 @@ public class GlobalActivityHookHelper {
             }
 
             //这个就是ActivityManager实例
-            Object ActivityManagerObj = ReflectUtil.invokeStaticMethod(ActivityManagerClz,getServiceMethodStr);
+            Object ActivityManagerObj = ReflectUtil.invokeStaticMethod(ActivityManagerClz, getServiceMethodStr);
             //这个就是这个就是ActivityManager实例中的IActivityManager单例对象
             Object IActivityManagerSingleton = ReflectUtil.staticFieldValue(ActivityManagerClz,
                     IActivityManagerSingletonFieldStr);
@@ -132,7 +131,7 @@ public class GlobalActivityHookHelper {
 
         @Override
         public Object invoke(Object proxy, Method method, Object[] args) throws Throwable {
-            Log.e("GlobalActivityHook", "method.getName() = "+method.getName());
+            Log.e("GlobalActivityHook", "method.getName() = " + method.getName());
             //proxy是创建出来的代理类，method是接口中的方法，args是接口执行时的实参
             if (method.getName().equals("startActivity")) {
                 Log.d("GlobalActivityHook", "全局hook 到了 startActivity");
@@ -224,11 +223,11 @@ public class GlobalActivityHookHelper {
         try {
             Class<?> activityThreadClazz = Class.forName("android.app.ActivityThread");
 
-            Object sCurrentActivityThread = ReflectUtil.staticFieldValue(activityThreadClazz,"sCurrentActivityThread");
+            Object sCurrentActivityThread = ReflectUtil.staticFieldValue(activityThreadClazz, "sCurrentActivityThread");
 
-            Handler mH = (Handler) ReflectUtil.fieldValue(sCurrentActivityThread,"mH");
+            Handler mH = (Handler) ReflectUtil.fieldValue(sCurrentActivityThread, "mH");
 
-            Field mCallBackField = ReflectUtil.findField(Handler.class,"mCallback");
+            Field mCallBackField = ReflectUtil.findField(Handler.class, "mCallback");
 
             Handler.Callback callback;
             if (ifSdkOverIncluding28()) {
@@ -277,7 +276,7 @@ public class GlobalActivityHookHelper {
         try {
             Object obj = msg.obj;
 
-            Intent proxyIntent = (Intent) ReflectUtil.fieldValue(obj,"intent");
+            Intent proxyIntent = (Intent) ReflectUtil.fieldValue(obj, "intent");
             //拿到之前真实要被启动的Intent 然后把Intent换掉
             Intent originallyIntent = proxyIntent.getParcelableExtra(ORI_INTENT_TAG);
             if (originallyIntent == null) {
@@ -292,6 +291,7 @@ public class GlobalActivityHookHelper {
 
     /**
      * 由于我只在SDK 28 对应的9.0设备上做过成功的试验，所以此方法命名为hookPMAfter28
+     *
      * @param context
      */
     private static void hookPMAfter28(Context context) {
@@ -301,10 +301,10 @@ public class GlobalActivityHookHelper {
 
 
             Class<?> activityThreadClazz = Class.forName("android.app.ActivityThread");
-            Object sCurrentActivityThread = ReflectUtil.staticFieldValue(activityThreadClazz,"sCurrentActivityThread");//PM居然是来自ActivityThread
+            Object sCurrentActivityThread = ReflectUtil.staticFieldValue(activityThreadClazz, "sCurrentActivityThread");//PM居然是来自ActivityThread
 
 
-            Object iPackageManager = ReflectUtil.invokeMethod(sCurrentActivityThread,"getPackageManager");
+            Object iPackageManager = ReflectUtil.invokeMethod(sCurrentActivityThread, "getPackageManager");
 
             String packageName = Util.getPMName(context);
             PMSInvocationHandler handler = new PMSInvocationHandler(iPackageManager, packageName, hostClzName);
@@ -315,9 +315,7 @@ public class GlobalActivityHookHelper {
             Field sPackageManagerField = ReflectUtil.findField(sCurrentActivityThread, "sPackageManager");
             sPackageManagerField.set(sCurrentActivityThread, proxy);
         } catch (
-                Exception e)
-
-        {
+                Exception e) {
             e.printStackTrace();
         }
     }

@@ -1,11 +1,11 @@
 package study.hank.com.activityhookdemo.methodA;
 
 import android.content.Intent;
-import android.support.v7.app.AppCompatActivity;
 import android.os.Bundle;
+import android.support.v7.app.AppCompatActivity;
+import android.util.Log;
 import android.view.View;
 
-import study.hank.com.activityhookdemo.GlobalActivityHookHelper;
 import study.hank.com.activityhookdemo.R;
 
 public class MainActivity extends AppCompatActivity {
@@ -20,7 +20,7 @@ public class MainActivity extends AppCompatActivity {
                 startActivityByActivity();
             }
         });
-
+        Log.d("LifeCircle", "onCreate()");
     }
 
     private void startActivityByActivity() {
@@ -28,5 +28,39 @@ public class MainActivity extends AppCompatActivity {
         startActivity(i);
     }
 
+    @Override
+    protected void onRestart() {
+        super.onRestart();
+        Log.d("LifeCircle", "onRestart()");
+    }
 
+    @Override
+    protected void onStart() {
+        super.onStart();
+        Log.d("LifeCircle", "onStart()");
+    }
+
+    @Override
+    protected void onResume() {
+        super.onResume();
+        Log.d("LifeCircle", "onResume()");
+    }
+
+    @Override
+    protected void onStop() {
+        super.onStop();
+        Log.d("LifeCircle", "onStop()");
+    }
+
+    @Override
+    protected void onPause() {
+        super.onPause();
+        Log.d("LifeCircle", "onPause()");
+    }
+
+    @Override
+    protected void onDestroy() {
+        super.onDestroy();
+        Log.d("LifeCircle", "onDestroy()");
+    }
 }
