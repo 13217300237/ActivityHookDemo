@@ -166,6 +166,16 @@ public class GlobalActivityHookHelper {
 
     //下面进行ActivityThread的mH的hook,这是针对SDK28做的hook
     //将真实的Intent还原回去，让系统可以跳到原本该跳的地方.
+
+    /**
+     * 注意，这里有个坑
+     * android.os.handler 这个类有 3个 callback，按照优先级，依次是 msg的callback，自己成员变量mCallback，自己的成员方法 handleMessage()
+     *
+     * 其中，msg.callback一般很少用，但是它是最优先的，如果有一个Message.存在callback非空成员,那么它是先执行，后面两个就没戏了。
+     * 如果 handler自己的成员变量mCallback，非空，那么 handlerMessage()方法就没戏了
+     * 前面两个都执行，那么handlerMessage才会执行，
+     * 这个叫责任链模式？根据实际条件决定代码分支。
+     */
     private static class ProxyHandlerCallback implements Handler.Callback {
 
         private int EXECUTE_TRANSACTION = 159;//这个值，是android.app.ActivityThread的内部类H 中定义的常量EXECUTE_TRANSACTION
@@ -190,7 +200,7 @@ public class GlobalActivityHookHelper {
                     //拿到了ClientTransaction的List<ClientTransactionItem> mActivityCallbacks;
                     List list = (List) mActivityCallbacksObj;
 
-                    if (list.size() == 0) return true;
+                    if (list.size() == 0) return false;
                     Object LaunchActivityItemObj = list.get(0);//所以这里直接就拿到第一个就好了
 
                     if (!LaunchActivityItemClz.isInstance(LaunchActivityItemObj)) return true;
